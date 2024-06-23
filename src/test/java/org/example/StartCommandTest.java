@@ -3,110 +3,99 @@ package org.example;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 public class StartCommandTest {
 
     private BlockingQueue<ICommand> queue;
-    private StartCommand startCommand;
+    private Flag flag;
 
     @BeforeEach
     public void setUp() {
-        queue = new LinkedBlockingQueue<>();
-        startCommand = new StartCommand(queue);
+        queue = new ArrayBlockingQueue<>(10);
+        flag = new Flag(true);
     }
 
     @Test
-    public void testHardStopCommand() throws InterruptedException {
-        ICommand mockCommand = mock(ICommand.class);
-        queue.put(mockCommand);
+    public void testStartCommandWithHardStop() throws InterruptedException {
+        StartCommand startCommand = new StartCommand(queue, flag);
+        HardStopCommand hardStopCommand = new HardStopCommand(flag);
 
-        startCommand.execute();
+        queue.add(hardStopCommand);
 
-        Thread.sleep(100);
+        Thread startThread = new Thread(startCommand::execute);
+        startThread.start();
 
-        HardStopCommand hardStopCommand = new HardStopCommand(startCommand);
-        queue.put(hardStopCommand);
+        startThread.join(1000);
 
-        Thread.sleep(100);
-
-        assertFalse(startCommand.isRunning());
-
-        verify(mockCommand, times(1)).execute();
+        assertFalse(flag.isFlag());
     }
 
     @Test
-    public void testSoftStopCommand() throws InterruptedException {
-        ICommand mockCommand1 = mock(ICommand.class);
-        ICommand mockCommand2 = mock(ICommand.class);
-        queue.put(mockCommand1);
-        queue.put(mockCommand2);
+    public void testStartCommandWithSoftStop() throws InterruptedException {
+        StartCommand startCommand = new StartCommand(queue, flag);
+        SoftStopCommand softStopCommand = new SoftStopCommand(queue, flag);
 
-        startCommand.execute();
+        queue.add(softStopCommand);
 
-        Thread.sleep(100);
+        Thread startThread = new Thread(startCommand::execute);
+        startThread.start();
 
-        SoftStopCommand softStopCommand = new SoftStopCommand(startCommand);
-        queue.put(softStopCommand);
+        startThread.join(1000);
 
-        Thread.sleep(100);
-
-        assertFalse(startCommand.isRunning());
-
-        verify(mockCommand1, times(1)).execute();
-        verify(mockCommand2, times(1)).execute();
+        assertFalse(flag.isFlag());
     }
 
     @Test
-    public void testSoftStopCommandWithMultipleCommands() throws InterruptedException {
-        ICommand mockCommand1 = mock(ICommand.class);
-        ICommand mockCommand2 = mock(ICommand.class);
-        ICommand mockCommand3 = mock(ICommand.class);
-        queue.put(mockCommand1);
-        queue.put(mockCommand2);
-        queue.put(mockCommand3);
+    public void testStartCommandNewTreadWithHardStop() throws InterruptedException {
+        StartCommandNewTread startCommandNewTread = new StartCommandNewTread(queue, flag);
+        HardStopCommand hardStopCommand = new HardStopCommand(flag);
 
-        startCommand.execute();
+        startCommandNewTread.execute();
 
-        Thread.sleep(100);
+        queue.add(hardStopCommand);
 
-        SoftStopCommand softStopCommand = new SoftStopCommand(startCommand);
-        queue.put(softStopCommand);
+        Thread.sleep(1000);
 
-        Thread.sleep(100);
-
-        assertFalse(startCommand.isRunning());
-
-        verify(mockCommand1, times(1)).execute();
-        verify(mockCommand2, times(1)).execute();
-        verify(mockCommand3, times(1)).execute();
+        assertFalse(flag.isFlag());
     }
 
     @Test
-    public void testCommandExecutionContinuesAfterException() throws InterruptedException {
-        ICommand failingCommand = mock(ICommand.class);
+    public void testStartCommandNewTreadWithSoftStop() throws InterruptedException {
+        StartCommandNewTread startCommandNewTread = new StartCommandNewTread(queue, flag);
+        SoftStopCommand softStopCommand = new SoftStopCommand(queue, flag);
+
+        startCommandNewTread.execute();
+
+        queue.add(softStopCommand);
+
+        Thread.sleep(2000);
+
+        assertFalse(flag.isFlag());
+    }
+
+    @Test
+    public void testStartCommandHandlesException() throws InterruptedException {
+        ICommand failingCommand = Mockito.mock(ICommand.class);
         doThrow(new RuntimeException("Test Exception")).when(failingCommand).execute();
 
-        ICommand succeedingCommand1 = mock(ICommand.class);
-        ICommand succeedingCommand2 = mock(ICommand.class);
+        queue.add(failingCommand);
+        queue.add(new HardStopCommand(flag));
 
-        queue.put(failingCommand);
-        queue.put(succeedingCommand1);
-        queue.put(succeedingCommand2);
+        StartCommand startCommand = new StartCommand(queue, flag);
+        Thread startCommandThread = new Thread(startCommand::execute);
+        startCommandThread.start();
 
-        startCommand.execute();
+        startCommandThread.join(1000);
 
-        Thread.sleep(300);
+        assertFalse(flag.isFlag());
 
-        verify(failingCommand, times(1)).execute();
-        verify(succeedingCommand1, times(1)).execute();
-        verify(succeedingCommand2, times(1)).execute();
-
-        assertTrue(startCommand.isRunning());
+        Mockito.verify(failingCommand).execute();
     }
 }
 

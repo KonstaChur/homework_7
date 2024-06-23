@@ -1,17 +1,21 @@
 package org.example;
 
+import java.util.concurrent.BlockingQueue;
+
 public class SoftStopCommand implements ICommand {
 
-    private final StartCommand startCommand;
+    private final BlockingQueue<ICommand> queue;
+    private final Flag flag;
 
-    public SoftStopCommand(StartCommand startCommand) {
-        this.startCommand = startCommand;
+    public SoftStopCommand(BlockingQueue<ICommand> queue, Flag flag) {
+        this.queue = queue;
+        this.flag = flag;
     }
+
 
     @Override
     public void execute() {
-        startCommand.softStop();
-        System.out.println("Запустил SoftStop");
+        queue.add(new HardStopCommand(flag));
     }
 }
 
